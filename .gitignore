@@ -1,0 +1,33 @@
+# Roblox Studio temporary lock files
+*.lock
+
+# Rojo build outputs
+build.rbxl
+build.rbxlx
+build.rbxm
+build.rbxmx
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# VS Code local settings
+.vscode/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Roblox autosave files
+*.autosave
+
+# Secrets / environment files
+.env
+.env.*
+*.secret
+secrets/
+
+# Tool caches
+.cache/

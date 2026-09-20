@@ -1,0 +1,58 @@
+{
+  "name": "MusicHangout",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+
+      "Modules": {
+        "$className": "Folder",
+        "$path": "src/ReplicatedStorage/Modules",
+        "$ignoreUnknownInstances": true
+      },
+
+      "Remotes": {
+        "$className": "Folder",
+        "$path": "src/ReplicatedStorage/Remotes",
+        "$ignoreUnknownInstances": true
+      },
+
+      "Shared": {
+        "$className": "Folder",
+        "$path": "src/ReplicatedStorage/Shared",
+        "$ignoreUnknownInstances": true
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "$path": "src/ServerScriptService",
+      "$ignoreUnknownInstances": true
+    },
+
+    "StarterGui": {
+      "$className": "StarterGui",
+      "$path": "src/StarterGui",
+      "$ignoreUnknownInstances": true
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "$path": "src/StarterPlayer/StarterPlayerScripts",
+        "$ignoreUnknownInstances": true
+      }
+    },
+
+    "SoundService": {
+      "$className": "SoundService",
+
+      "Music": {
+        "$className": "Folder"
+      }
+    }
+  }
+}
