@@ -31,3 +31,6 @@ secrets/
 
 # Tool caches
 .cache/
+
+# Local Roblox Studio plugin files
+*.rbxm
