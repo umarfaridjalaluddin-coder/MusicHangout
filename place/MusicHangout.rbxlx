@@ -126,9 +126,9 @@
 		<Item class="Camera" referent="RBX8AAC7562B78E42DEA1270E8382935D78">
 			<Properties>
 				<CoordinateFrame name="CFrame">
-					<X>9.83760166</X>
-					<Y>32.2919579</Y>
-					<Z>18.8196831</Z>
+					<X>-35.9543381</X>
+					<Y>68.3966522</Y>
+					<Z>182.721588</Z>
 					<R00>1</R00>
 					<R01>0</R01>
 					<R02>-0</R02>
@@ -144,9 +144,9 @@
 				<float name="FieldOfView">70</float>
 				<token name="FieldOfViewMode">0</token>
 				<CoordinateFrame name="Focus">
-					<X>9.83760166</X>
-					<Y>32.2919579</Y>
-					<Z>16.8196869</Z>
+					<X>-35.9543381</X>
+					<Y>68.3966522</Y>
+					<Z>180.721588</Z>
 					<R00>1</R00>
 					<R01>0</R01>
 					<R02>0</R02>
@@ -5397,12 +5397,18 @@ zNLfaoZA///+//PAj5CH]]></BinaryString>
 	</Item>
 	<Item class="PlayerEmulatorService" referent="RBXBF5FBDDB9CF845C38E006F3DC53E1203">
 		<Properties>
-			<bool name="CustomPoliciesEnabled">false</bool>
+			<bool name="CustomPoliciesEnabled">true</bool>
 			<string name="EmulatedCountryCode"></string>
 			<string name="EmulatedGameLocale"></string>
 			<bool name="PlayerEmulationEnabled">false</bool>
 			<bool name="PseudolocalizationEnabled">false</bool>
-			<BinaryString name="SerializedEmulatedPolicyInfo"></BinaryString>
+			<BinaryString name="SerializedEmulatedPolicyInfo"><![CDATA[CwAAAB0AAABBbGxvd2VkRXh0ZXJuYWxMaW5rUmVmZXJlbmNlcwcAAAAADQAAAEFyZUFkc0Fs
+bG93ZWQDABwAAABBcmVQYWlkUmFuZG9tSXRlbXNSZXN0cmljdGVkAwAXAAAASXNDb250ZW50
+U2hhcmluZ0FsbG93ZWQDACMAAABJc0VsaWdpYmxlVG9QdXJjaGFzZUNvbW1lcmNlUHJvZHVj
+dAMBIAAAAElzRWxpZ2libGVUb1B1cmNoYXNlU3Vic2NyaXB0aW9uAwEfAAAASXNFbmRsZXNz
+Q29udGVudEF1dG9wbGF5QWxsb3dlZAMAGwAAAElzRW5kbGVzc0NvbnRlbnRMb2FkQWxsb3dl
+ZAMAGAAAAElzUGFpZEl0ZW1UcmFkaW5nQWxsb3dlZAMBFgAAAElzUGhvdG9Ub0F2YXRhckFs
+bG93ZWQDABgAAABJc1N1YmplY3RUb0NoaW5hUG9saWNpZXMDAA==]]></BinaryString>
 			<int name="TextElongationFactor">0</int>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -5540,6 +5546,700 @@ zNLfaoZA///+//PAj5CH]]></BinaryString>
 			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			<UniqueId name="UniqueId">7cb6673b57ee23310ac1cf6a0000038f</UniqueId>
 		</Properties>
+		<Item class="Folder" referent="RBX2269ED88E5924D928273513BE112414A">
+			<Properties>
+				<Color3 name="IconTint">
+					<R>0</R>
+					<G>0</G>
+					<B>0</B>
+				</Color3>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+				<string name="Name">MusicUI</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+				<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be0000287a</UniqueId>
+			</Properties>
+			<Item class="LocalScript" referent="RBXB1BCC51DC0F4459AA7D56335EBFBFEE4">
+				<Properties>
+					<ProtectedString name="Source"><![CDATA[-- MusicUI (PERMANENT)
+-- Display-only Now Playing card. Reads server-authoritative state via
+-- MusicStateChanged (live updates) and GetMusicState (late-join snapshot).
+-- This script never sends playback commands to the server.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local LOG = "[MusicUI] "
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- ============================================================
+-- Wait for the remotes MusicServer is responsible for creating.
+-- Defensive: if MusicServer hasn't run yet or is missing, don't hang forever.
+-- ============================================================
+
+local remotesFolder = ReplicatedStorage:WaitForChild("Remotes", 10)
+if not remotesFolder then
+	warn(LOG .. "ReplicatedStorage.Remotes not found after waiting. Music UI will not function.")
+	return
+end
+
+local musicStateChanged = remotesFolder:WaitForChild("MusicStateChanged", 10)
+local getMusicState = remotesFolder:WaitForChild("GetMusicState", 10)
+
+if not musicStateChanged or not getMusicState then
+	warn(LOG .. "Required music remotes not found. Music UI will not function.")
+	return
+end
+
+-- ============================================================
+-- Build the UI (once). ScreenGui lives directly under PlayerGui.
+-- ============================================================
+
+-- Guard against duplicates if this script is somehow re-run.
+local existing = playerGui:FindFirstChild("MusicUI")
+if existing then
+	existing:Destroy()
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MusicUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 10
+screenGui.IgnoreGuiInset = false
+screenGui.Parent = playerGui
+
+local card = Instance.new("Frame")
+card.Name = "NowPlaying"
+card.AnchorPoint = Vector2.new(0.5, 1)
+card.Position = UDim2.new(0.5, 0, 1, -20)
+card.Size = UDim2.new(0.8, 0, 0, 92)
+card.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+card.BackgroundTransparency = 0.15
+card.BorderSizePixel = 0
+card.Parent = screenGui
+
+local cardSizeConstraint = Instance.new("UISizeConstraint")
+cardSizeConstraint.MinSize = Vector2.new(220, 88)
+cardSizeConstraint.MaxSize = Vector2.new(420, 110)
+cardSizeConstraint.Parent = card
+
+local cardCorner = Instance.new("UICorner")
+cardCorner.CornerRadius = UDim.new(0, 12)
+cardCorner.Parent = card
+
+local cardStroke = Instance.new("UIStroke")
+cardStroke.Color = Color3.fromRGB(255, 255, 255)
+cardStroke.Transparency = 0.9
+cardStroke.Thickness = 1
+cardStroke.Parent = card
+
+local cardPadding = Instance.new("UIPadding")
+cardPadding.PaddingLeft = UDim.new(0, 14)
+cardPadding.PaddingRight = UDim.new(0, 14)
+cardPadding.PaddingTop = UDim.new(0, 10)
+cardPadding.PaddingBottom = UDim.new(0, 10)
+cardPadding.Parent = card
+
+local trackTitle = Instance.new("TextLabel")
+trackTitle.Name = "TrackTitle"
+trackTitle.BackgroundTransparency = 1
+trackTitle.Size = UDim2.new(1, 0, 0, 20)
+trackTitle.Position = UDim2.new(0, 0, 0, 0)
+trackTitle.Font = Enum.Font.GothamBold
+trackTitle.Text = "Loading..."
+trackTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+trackTitle.TextXAlignment = Enum.TextXAlignment.Left
+trackTitle.TextSize = 16
+trackTitle.TextTruncate = Enum.TextTruncate.AtEnd
+trackTitle.Parent = card
+
+local artistLabel = Instance.new("TextLabel")
+artistLabel.Name = "ArtistLabel"
+artistLabel.BackgroundTransparency = 1
+artistLabel.Size = UDim2.new(1, 0, 0, 16)
+artistLabel.Position = UDim2.new(0, 0, 0, 22)
+artistLabel.Font = Enum.Font.Gotham
+artistLabel.Text = ""
+artistLabel.TextColor3 = Color3.fromRGB(190, 190, 200)
+artistLabel.TextXAlignment = Enum.TextXAlignment.Left
+artistLabel.TextSize = 12
+artistLabel.TextTruncate = Enum.TextTruncate.AtEnd
+artistLabel.Parent = card
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Name = "StatusLabel"
+statusLabel.BackgroundTransparency = 1
+statusLabel.Size = UDim2.new(1, 0, 0, 14)
+statusLabel.Position = UDim2.new(0, 0, 0, 40)
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.Text = "Waiting for music..."
+statusLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.TextSize = 11
+statusLabel.Parent = card
+
+local progressBackground = Instance.new("Frame")
+progressBackground.Name = "ProgressBackground"
+progressBackground.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
+progressBackground.BorderSizePixel = 0
+progressBackground.Size = UDim2.new(1, 0, 0, 6)
+progressBackground.Position = UDim2.new(0, 0, 0, 58)
+progressBackground.Parent = card
+
+local progressCorner = Instance.new("UICorner")
+progressCorner.CornerRadius = UDim.new(1, 0)
+progressCorner.Parent = progressBackground
+
+local progressFill = Instance.new("Frame")
+progressFill.Name = "ProgressFill"
+progressFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+progressFill.BorderSizePixel = 0
+progressFill.Size = UDim2.new(0, 0, 1, 0)
+progressFill.Parent = progressBackground
+
+local progressFillCorner = Instance.new("UICorner")
+progressFillCorner.CornerRadius = UDim.new(1, 0)
+progressFillCorner.Parent = progressFill
+
+local timeLabel = Instance.new("TextLabel")
+timeLabel.Name = "TimeLabel"
+timeLabel.BackgroundTransparency = 1
+timeLabel.Size = UDim2.new(1, 0, 0, 14)
+timeLabel.Position = UDim2.new(0, 0, 0, 68)
+timeLabel.Font = Enum.Font.Gotham
+timeLabel.Text = ""
+timeLabel.TextColor3 = Color3.fromRGB(190, 190, 200)
+timeLabel.TextXAlignment = Enum.TextXAlignment.Left
+timeLabel.TextSize = 11
+timeLabel.Parent = card
+
+-- ============================================================
+-- Time formatting helper: seconds -> M:SS, safe against bad input.
+-- ============================================================
+
+local function formatTime(seconds)
+	if type(seconds) ~= "number" or seconds ~= seconds or seconds == math.huge or seconds == -math.huge then
+		return "0:00"
+	end
+	seconds = math.max(0, math.floor(seconds))
+	local minutes = math.floor(seconds / 60)
+	local remainder = seconds % 60
+	return string.format("%d:%02d", minutes, remainder)
+end
+
+-- ============================================================
+-- Local state (from server) + local progress calculation
+-- ============================================================
+
+local activeState = nil -- last-applied {TrackIndex, Title, Artist, SoundId, Duration, StartedAt}
+local lastAppliedStartedAt = -1
+
+local function applyState(state)
+	if not state or type(state) ~= "table" then
+		return
+	end
+
+	-- Guard against an older GetMusicState response overwriting a newer
+	-- MusicStateChanged event (or vice versa): only apply if this state's
+	-- StartedAt is not older than what we already have.
+	if state.StartedAt and state.StartedAt < lastAppliedStartedAt then
+		return
+	end
+
+	activeState = state
+	if state.StartedAt then
+		lastAppliedStartedAt = state.StartedAt
+	end
+
+	trackTitle.Text = (type(state.Title) == "string" and state.Title ~= "") and state.Title or "Unknown Title"
+	artistLabel.Text = (type(state.Artist) == "string" and state.Artist ~= "") and state.Artist or "Unknown Artist"
+	statusLabel.Text = "Playing"
+end
+
+-- Connect BEFORE requesting the snapshot, so we don't miss a track change
+-- that happens while GetMusicState is in flight.
+musicStateChanged.OnClientEvent:Connect(function(state)
+	applyState(state)
+end)
+
+task.spawn(function()
+	local ok, snapshot = pcall(function()
+		return getMusicState:InvokeServer()
+	end)
+	if ok and snapshot then
+		applyState(snapshot)
+	elseif not ok then
+		warn(LOG .. "GetMusicState request failed: " .. tostring(snapshot))
+	end
+end)
+
+-- ============================================================
+-- Local progress update loop. No remote calls here -- purely visual,
+-- using the server-provided StartedAt/Duration and local server-time.
+-- ============================================================
+
+RunService.RenderStepped:Connect(function()
+	if not activeState or not activeState.StartedAt then
+		return
+	end
+
+	local duration = activeState.Duration
+	local elapsed = Workspace:GetServerTimeNow() - activeState.StartedAt
+
+	if type(duration) ~= "number" or duration <= 0 then
+		-- Duration not known yet: show 0:00 / 0:00 and an empty bar rather
+		-- than dividing by zero.
+		progressFill.Size = UDim2.new(0, 0, 1, 0)
+		timeLabel.Text = formatTime(math.max(0, elapsed)) .. " / 0:00"
+		return
+	end
+
+	local clampedElapsed = math.clamp(elapsed, 0, duration)
+	local progress = clampedElapsed / duration
+
+	progressFill.Size = UDim2.new(progress, 0, 1, 0)
+	timeLabel.Text = formatTime(clampedElapsed) .. " / " .. formatTime(duration)
+end)]]></ProtectedString>
+					<bool name="Disabled">false</bool>
+					<Content name="LinkedSource"><null></null></Content>
+					<token name="RunContext">0</token>
+					<string name="ScriptGuid">{219CCEFE-5D9A-4BC9-B4D9-4706D4771127}</string>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+					<string name="Name">MusicUI</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be0000287b</UniqueId>
+				</Properties>
+			</Item>
+		</Item>
+		<Item class="Folder" referent="RBX8EE9DA63AC154BDD9A34E7F792A02DDF">
+			<Properties>
+				<Color3 name="IconTint">
+					<R>0</R>
+					<G>0</G>
+					<B>0</B>
+				</Color3>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+				<string name="Name">ShopUI</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+				<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00003847</UniqueId>
+			</Properties>
+			<Item class="LocalScript" referent="RBXE1EEF689459347DF9AB14DB6137915B5">
+				<Properties>
+					<ProtectedString name="Source"><![CDATA[-- ShopUI (PERMANENT)
+-- Display + interaction only. All purchase/equip decisions are made by
+-- ShopServer; this script only requests actions and renders results.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LOG = "[ShopUI] "
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local remotesFolder = ReplicatedStorage:WaitForChild("Remotes", 10)
+if not remotesFolder then
+	warn(LOG .. "ReplicatedStorage.Remotes not found. Shop UI will not function.")
+	return
+end
+
+local getShopState = remotesFolder:WaitForChild("GetShopState", 10)
+local purchaseShopItem = remotesFolder:WaitForChild("PurchaseShopItem", 10)
+local equipShopItem = remotesFolder:WaitForChild("EquipShopItem", 10)
+
+if not (getShopState and purchaseShopItem and equipShopItem) then
+	warn(LOG .. "Required shop remotes not found. Shop UI will not function.")
+	return
+end
+
+local ShopCatalog = require(ReplicatedStorage.Modules.ShopCatalog)
+
+-- ============================================================
+-- Build the UI (once). Guard against duplicates.
+-- ============================================================
+
+local existing = playerGui:FindFirstChild("ShopUI")
+if existing then
+	existing:Destroy()
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ShopUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 10
+screenGui.Parent = playerGui
+
+-- ---- Shop open button ----
+
+local shopButton = Instance.new("TextButton")
+shopButton.Name = "ShopButton"
+shopButton.AnchorPoint = Vector2.new(1, 0.5)
+shopButton.Position = UDim2.new(1, -16, 0.5, 0)
+shopButton.Size = UDim2.new(0, 64, 0, 64)
+shopButton.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+shopButton.BackgroundTransparency = 0.1
+shopButton.Font = Enum.Font.GothamBold
+shopButton.Text = "SHOP"
+shopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+shopButton.TextSize = 14
+shopButton.AutoButtonColor = true
+shopButton.Parent = screenGui
+
+local shopButtonCorner = Instance.new("UICorner")
+shopButtonCorner.CornerRadius = UDim.new(0, 12)
+shopButtonCorner.Parent = shopButton
+
+local shopButtonStroke = Instance.new("UIStroke")
+shopButtonStroke.Color = Color3.fromRGB(255, 255, 255)
+shopButtonStroke.Transparency = 0.85
+shopButtonStroke.Parent = shopButton
+
+-- ---- Shop panel (hidden by default) ----
+
+local panel = Instance.new("Frame")
+panel.Name = "ShopPanel"
+panel.AnchorPoint = Vector2.new(0.5, 0.5)
+panel.Position = UDim2.new(0.5, 0, 0.5, 0)
+panel.Size = UDim2.new(0.85, 0, 0.75, 0)
+panel.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+panel.BackgroundTransparency = 0.05
+panel.BorderSizePixel = 0
+panel.Visible = false
+panel.Parent = screenGui
+
+local panelSizeConstraint = Instance.new("UISizeConstraint")
+panelSizeConstraint.MinSize = Vector2.new(260, 320)
+panelSizeConstraint.MaxSize = Vector2.new(460, 560)
+panelSizeConstraint.Parent = panel
+
+local panelCorner = Instance.new("UICorner")
+panelCorner.CornerRadius = UDim.new(0, 14)
+panelCorner.Parent = panel
+
+local panelStroke = Instance.new("UIStroke")
+panelStroke.Color = Color3.fromRGB(255, 255, 255)
+panelStroke.Transparency = 0.9
+panelStroke.Parent = panel
+
+local panelPadding = Instance.new("UIPadding")
+panelPadding.PaddingLeft = UDim.new(0, 16)
+panelPadding.PaddingRight = UDim.new(0, 16)
+panelPadding.PaddingTop = UDim.new(0, 14)
+panelPadding.PaddingBottom = UDim.new(0, 14)
+panelPadding.Parent = panel
+
+-- Header row: "SHOP" + Coins balance + Close button
+
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.BackgroundTransparency = 1
+header.Size = UDim2.new(1, 0, 0, 32)
+header.Position = UDim2.new(0, 0, 0, 0)
+header.Parent = panel
+
+local headerTitle = Instance.new("TextLabel")
+headerTitle.Name = "HeaderTitle"
+headerTitle.BackgroundTransparency = 1
+headerTitle.Size = UDim2.new(0.5, 0, 1, 0)
+headerTitle.Font = Enum.Font.GothamBold
+headerTitle.Text = "SHOP"
+headerTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+headerTitle.TextXAlignment = Enum.TextXAlignment.Left
+headerTitle.TextSize = 18
+headerTitle.Parent = header
+
+local coinsLabel = Instance.new("TextLabel")
+coinsLabel.Name = "CoinsLabel"
+coinsLabel.BackgroundTransparency = 1
+coinsLabel.AnchorPoint = Vector2.new(1, 0)
+coinsLabel.Position = UDim2.new(1, -40, 0, 0)
+coinsLabel.Size = UDim2.new(0.4, 0, 1, 0)
+coinsLabel.Font = Enum.Font.Gotham
+coinsLabel.Text = "0 Coins"
+coinsLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+coinsLabel.TextXAlignment = Enum.TextXAlignment.Right
+coinsLabel.TextSize = 14
+coinsLabel.Parent = header
+
+local closeButton = Instance.new("TextButton")
+closeButton.Name = "CloseButton"
+closeButton.AnchorPoint = Vector2.new(1, 0)
+closeButton.Position = UDim2.new(1, 0, 0, 0)
+closeButton.Size = UDim2.new(0, 32, 0, 32)
+closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+closeButton.Font = Enum.Font.GothamBold
+closeButton.Text = "X"
+closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.TextSize = 14
+closeButton.Parent = header
+
+local closeButtonCorner = Instance.new("UICorner")
+closeButtonCorner.CornerRadius = UDim.new(0, 8)
+closeButtonCorner.Parent = closeButton
+
+-- Status/feedback label
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Name = "StatusLabel"
+statusLabel.BackgroundTransparency = 1
+statusLabel.Size = UDim2.new(1, 0, 0, 18)
+statusLabel.Position = UDim2.new(0, 0, 0, 36)
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.Text = ""
+statusLabel.TextColor3 = Color3.fromRGB(150, 220, 150)
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.TextSize = 12
+statusLabel.Parent = panel
+
+-- Scrolling item list
+
+local scroll = Instance.new("ScrollingFrame")
+scroll.Name = "ItemList"
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.Position = UDim2.new(0, 0, 0, 58)
+scroll.Size = UDim2.new(1, 0, 1, -58)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.ScrollBarThickness = 6
+scroll.Parent = panel
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 8)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = scroll
+
+-- ---- Build one card per catalog item ----
+
+local itemCards = {} -- [itemId] = { card, actionButton, statusText }
+
+for i, item in ipairs(ShopCatalog) do
+	local card = Instance.new("Frame")
+	card.Name = "Card_" .. item.Id
+	card.LayoutOrder = i
+	card.Size = UDim2.new(1, 0, 0, 70)
+	card.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+	card.BorderSizePixel = 0
+	card.Parent = scroll
+
+	local cardCorner = Instance.new("UICorner")
+	cardCorner.CornerRadius = UDim.new(0, 10)
+	cardCorner.Parent = card
+
+	local cardPadding = Instance.new("UIPadding")
+	cardPadding.PaddingLeft = UDim.new(0, 10)
+	cardPadding.PaddingRight = UDim.new(0, 10)
+	cardPadding.PaddingTop = UDim.new(0, 8)
+	cardPadding.PaddingBottom = UDim.new(0, 8)
+	cardPadding.Parent = card
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Size = UDim2.new(0.65, 0, 0, 18)
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.Text = item.Name
+	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.TextSize = 14
+	nameLabel.Parent = card
+
+	local descLabel = Instance.new("TextLabel")
+	descLabel.BackgroundTransparency = 1
+	descLabel.Size = UDim2.new(0.65, 0, 0, 16)
+	descLabel.Position = UDim2.new(0, 0, 0, 20)
+	descLabel.Font = Enum.Font.Gotham
+	descLabel.Text = item.Description or ""
+	descLabel.TextColor3 = Color3.fromRGB(170, 170, 180)
+	descLabel.TextXAlignment = Enum.TextXAlignment.Left
+	descLabel.TextSize = 11
+	descLabel.TextWrapped = true
+	descLabel.Parent = card
+
+	local priceLabel = Instance.new("TextLabel")
+	priceLabel.BackgroundTransparency = 1
+	priceLabel.Size = UDim2.new(0.65, 0, 0, 14)
+	priceLabel.Position = UDim2.new(0, 0, 0, 38)
+	priceLabel.Font = Enum.Font.Gotham
+	priceLabel.Text = tostring(item.Price) .. " Coins"
+	priceLabel.TextColor3 = Color3.fromRGB(200, 200, 100)
+	priceLabel.TextXAlignment = Enum.TextXAlignment.Left
+	priceLabel.TextSize = 11
+	priceLabel.Parent = card
+
+	local actionButton = Instance.new("TextButton")
+	actionButton.Name = "ActionButton"
+	actionButton.AnchorPoint = Vector2.new(1, 0.5)
+	actionButton.Position = UDim2.new(1, 0, 0.5, 0)
+	actionButton.Size = UDim2.new(0, 84, 0, 36)
+	actionButton.BackgroundColor3 = Color3.fromRGB(70, 130, 230)
+	actionButton.Font = Enum.Font.GothamBold
+	actionButton.Text = "BUY"
+	actionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	actionButton.TextSize = 12
+	actionButton.Parent = card
+
+	local actionCorner = Instance.new("UICorner")
+	actionCorner.CornerRadius = UDim.new(0, 8)
+	actionCorner.Parent = actionButton
+
+	itemCards[item.Id] = {
+		card = card,
+		actionButton = actionButton,
+	}
+end
+
+-- ============================================================
+-- State rendering
+-- ============================================================
+
+local lastState = nil
+
+local function setStatus(text, isError)
+	statusLabel.Text = text or ""
+	statusLabel.TextColor3 = isError and Color3.fromRGB(230, 130, 130) or Color3.fromRGB(150, 220, 150)
+end
+
+local function renderState(state)
+	if not state then
+		return
+	end
+	lastState = state
+
+	coinsLabel.Text = tostring(state.Coins or 0) .. " Coins"
+
+	for _, item in ipairs(ShopCatalog) do
+		local ui = itemCards[item.Id]
+		if ui then
+			local owned = state.OwnedItems and state.OwnedItems[item.Id]
+			local equipped = state.Equipped and state.Equipped[item.Type] == item.Id
+
+			if equipped then
+				ui.actionButton.Text = "EQUIPPED"
+				ui.actionButton.BackgroundColor3 = Color3.fromRGB(60, 60, 68)
+			elseif owned then
+				ui.actionButton.Text = "EQUIP"
+				ui.actionButton.BackgroundColor3 = Color3.fromRGB(80, 170, 100)
+			else
+				ui.actionButton.Text = "BUY"
+				ui.actionButton.BackgroundColor3 = Color3.fromRGB(70, 130, 230)
+			end
+		end
+	end
+end
+
+-- ============================================================
+-- Actions (client debounce is UX only; server enforces real rate limiting)
+-- ============================================================
+
+local actionInFlight = false
+
+local function handleAction(item)
+	if actionInFlight then
+		return
+	end
+
+	local owned = lastState and lastState.OwnedItems and lastState.OwnedItems[item.Id]
+	local equipped = lastState and lastState.Equipped and lastState.Equipped[item.Type] == item.Id
+
+	if equipped then
+		return -- nothing to do
+	end
+
+	actionInFlight = true
+	setStatus("Please wait...", false)
+
+	task.spawn(function()
+		local ok, result
+
+		if owned then
+			ok, result = pcall(function()
+				return equipShopItem:InvokeServer(item.Id)
+			end)
+		else
+			ok, result = pcall(function()
+				return purchaseShopItem:InvokeServer(item.Id)
+			end)
+		end
+
+		if ok and result then
+			setStatus(result.Message or "", not result.Success)
+		else
+			setStatus("Request failed.", true)
+			warn(LOG .. "Action request failed: " .. tostring(result))
+		end
+
+		-- Refresh authoritative state after any purchase/equip attempt,
+		-- success or failure, so the UI never trusts its own guess.
+		local refreshOk, refreshed = pcall(function()
+			return getShopState:InvokeServer()
+		end)
+		if refreshOk and refreshed then
+			renderState(refreshed)
+		end
+
+		actionInFlight = false
+	end)
+end
+
+for _, item in ipairs(ShopCatalog) do
+	local ui = itemCards[item.Id]
+	ui.actionButton.MouseButton1Click:Connect(function()
+		handleAction(item)
+	end)
+end
+
+-- ============================================================
+-- Open / close
+-- ============================================================
+
+shopButton.MouseButton1Click:Connect(function()
+	panel.Visible = true
+	setStatus("", false)
+	task.spawn(function()
+		local ok, state = pcall(function()
+			return getShopState:InvokeServer()
+		end)
+		if ok and state then
+			renderState(state)
+		else
+			warn(LOG .. "GetShopState failed: " .. tostring(state))
+		end
+	end)
+end)
+
+closeButton.MouseButton1Click:Connect(function()
+	panel.Visible = false
+end)]]></ProtectedString>
+					<bool name="Disabled">false</bool>
+					<Content name="LinkedSource"><null></null></Content>
+					<token name="RunContext">0</token>
+					<string name="ScriptGuid">{1844BB7F-B37F-4099-B263-96B9F6DEE573}</string>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+					<string name="Name">ShopUI</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00003848</UniqueId>
+				</Properties>
+			</Item>
+		</Item>
 	</Item>
 	<Item class="LocalizationService" referent="RBX74E07D54C38E49C285802BBCF2BFC37F">
 		<Properties>
@@ -5729,6 +6429,224 @@ zNLfaoZA///+//PAj5CH]]></BinaryString>
 			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			<UniqueId name="UniqueId">7cb6673b57ee23310ac1cf6a000003ad</UniqueId>
 		</Properties>
+		<Item class="AvatarRules" referent="RBXE332032551F544B795407EDC6B6BDF50">
+			<Properties>
+				<token name="AvatarType">1</token>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+				<string name="Name">DefaultAvatarRules</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+				<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00002c1a</UniqueId>
+			</Properties>
+			<Item class="AvatarBodyRules" referent="RBXDBEE014FC26F4803A48873DD8F4BACA8">
+				<Properties>
+					<token name="AppearanceMode">0</token>
+					<token name="BuildMode">0</token>
+					<int64 name="CustomBodyBundleId">0</int64>
+					<token name="CustomBodyType">0</token>
+					<NumberRange name="CustomBodyTypeScale">0 1 </NumberRange>
+					<bool name="CustomEyebrowEnabled">false</bool>
+					<int64 name="CustomEyebrowId">0</int64>
+					<bool name="CustomEyelashEnabled">false</bool>
+					<int64 name="CustomEyelashId">0</int64>
+					<bool name="CustomFaceEnabled">false</bool>
+					<int64 name="CustomFaceId">0</int64>
+					<bool name="CustomHeadEnabled">false</bool>
+					<int64 name="CustomHeadId">0</int64>
+					<NumberRange name="CustomHeadScale">0.95 1 </NumberRange>
+					<NumberRange name="CustomHeight">5.5 5.5 </NumberRange>
+					<NumberRange name="CustomHeightScale">0.9 1.05 </NumberRange>
+					<bool name="CustomLeftArmEnabled">false</bool>
+					<int64 name="CustomLeftArmId">0</int64>
+					<bool name="CustomLeftLegEnabled">false</bool>
+					<int64 name="CustomLeftLegId">0</int64>
+					<bool name="CustomMoodEnabled">false</bool>
+					<int64 name="CustomMoodId">0</int64>
+					<NumberRange name="CustomProportionsScale">0 1 </NumberRange>
+					<bool name="CustomRightArmEnabled">false</bool>
+					<int64 name="CustomRightArmId">0</int64>
+					<bool name="CustomRightLegEnabled">false</bool>
+					<int64 name="CustomRightLegId">0</int64>
+					<bool name="CustomTorsoEnabled">false</bool>
+					<int64 name="CustomTorsoId">0</int64>
+					<NumberRange name="CustomWidthScale">0.7 1 </NumberRange>
+					<bool name="KeepPlayerHead">true</bool>
+					<token name="ScaleMode">0</token>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+					<string name="Name">AvatarBodyRules</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00002c1b</UniqueId>
+				</Properties>
+			</Item>
+			<Item class="AvatarCollisionRules" referent="RBXC12C0F0401E14547BD8C210738BF6ECD">
+				<Properties>
+					<token name="CollisionMode">0</token>
+					<token name="HitAndTouchDetectionMode">0</token>
+					<token name="LegacyCollisionMode">1</token>
+					<Vector3 name="SingleColliderSize">
+						<X>2</X>
+						<Y>3</Y>
+						<Z>1</Z>
+					</Vector3>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+					<string name="Name">AvatarCollisionRules</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00002c1c</UniqueId>
+				</Properties>
+			</Item>
+			<Item class="AvatarAbilityRules" referent="RBX2F08682BCE374764BCF59E39CD4540E4">
+				<Properties>
+					<token name="CharacterControllerMode">0</token>
+					<bool name="EnableClimbing">true</bool>
+					<bool name="EnableCrouching">true</bool>
+					<bool name="EnableFallingDown">true</bool>
+					<bool name="EnableGettingUp">true</bool>
+					<bool name="EnableHolding">true</bool>
+					<bool name="EnableJumping">true</bool>
+					<bool name="EnableReaching">true</bool>
+					<bool name="EnableRunning">true</bool>
+					<bool name="EnableSitting">true</bool>
+					<bool name="EnableSprinting">true</bool>
+					<bool name="EnableSwimming">true</bool>
+					<bool name="EnableTurning">true</bool>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+					<string name="Name">AvatarAbilityRules</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00002c1d</UniqueId>
+				</Properties>
+			</Item>
+			<Item class="AvatarAnimationRules" referent="RBX834BB01714AF40A9A53E51CE84188786">
+				<Properties>
+					<token name="AnimationClipsMode">0</token>
+					<token name="AnimationPacksMode">0</token>
+					<bool name="CustomClimbAnimationEnabled">false</bool>
+					<int64 name="CustomClimbAnimationId">0</int64>
+					<bool name="CustomFallAnimationEnabled">false</bool>
+					<int64 name="CustomFallAnimationId">0</int64>
+					<bool name="CustomIdleAlt1AnimationEnabled">false</bool>
+					<int64 name="CustomIdleAlt1AnimationId">0</int64>
+					<bool name="CustomIdleAlt2AnimationEnabled">false</bool>
+					<int64 name="CustomIdleAlt2AnimationId">0</int64>
+					<bool name="CustomIdleAnimationEnabled">false</bool>
+					<int64 name="CustomIdleAnimationId">0</int64>
+					<bool name="CustomJumpAnimationEnabled">false</bool>
+					<int64 name="CustomJumpAnimationId">0</int64>
+					<bool name="CustomRunAnimationEnabled">false</bool>
+					<int64 name="CustomRunAnimationId">0</int64>
+					<bool name="CustomSwimAnimationEnabled">false</bool>
+					<int64 name="CustomSwimAnimationId">0</int64>
+					<bool name="CustomSwimIdleAnimationEnabled">false</bool>
+					<int64 name="CustomSwimIdleAnimationId">0</int64>
+					<bool name="CustomWalkAnimationEnabled">false</bool>
+					<int64 name="CustomWalkAnimationId">0</int64>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+					<string name="Name">AvatarAnimationRules</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00002c1e</UniqueId>
+				</Properties>
+			</Item>
+			<Item class="AvatarAccessoryRules" referent="RBXBBF630F7D7384D7283000BBB3A0D893F">
+				<Properties>
+					<token name="AccessoryMode">0</token>
+					<token name="CustomAccessoryMode">0</token>
+					<bool name="CustomBackAccessoryEnabled">false</bool>
+					<int64 name="CustomBackAccessoryId">0</int64>
+					<bool name="CustomFaceAccessoryEnabled">false</bool>
+					<int64 name="CustomFaceAccessoryId">0</int64>
+					<bool name="CustomFrontAccessoryEnabled">false</bool>
+					<int64 name="CustomFrontAccessoryId">0</int64>
+					<bool name="CustomHairAccessoryEnabled">false</bool>
+					<int64 name="CustomHairAccessoryId">0</int64>
+					<bool name="CustomHeadAccessoryEnabled">false</bool>
+					<int64 name="CustomHeadAccessoryId">0</int64>
+					<bool name="CustomNeckAccessoryEnabled">false</bool>
+					<int64 name="CustomNeckAccessoryId">0</int64>
+					<bool name="CustomShoulderAccessoryEnabled">false</bool>
+					<int64 name="CustomShoulderAccessoryId">0</int64>
+					<bool name="CustomWaistAccessoryEnabled">false</bool>
+					<int64 name="CustomWaistAccessoryId">0</int64>
+					<bool name="EnableEmissives">true</bool>
+					<bool name="EnableSound">true</bool>
+					<bool name="EnableVFX">true</bool>
+					<Vector3 name="LimitBounds">
+						<X>0</X>
+						<Y>0</Y>
+						<Z>0</Z>
+					</Vector3>
+					<token name="LimitMethod">1</token>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+					<string name="Name">AvatarAccessoryRules</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00002c1f</UniqueId>
+				</Properties>
+			</Item>
+			<Item class="AvatarClothingRules" referent="RBX340FD996EE054B3497E8A36A6C9E75A7">
+				<Properties>
+					<token name="ClothingMode">0</token>
+					<bool name="CustomClassicPantsAccessoryEnabled">false</bool>
+					<int64 name="CustomClassicPantsAccessoryId">0</int64>
+					<bool name="CustomClassicShirtsAccessoryEnabled">false</bool>
+					<int64 name="CustomClassicShirtsAccessoryId">0</int64>
+					<bool name="CustomClassicTShirtsAccessoryEnabled">false</bool>
+					<int64 name="CustomClassicTShirtsAccessoryId">0</int64>
+					<token name="CustomClothingMode">0</token>
+					<bool name="CustomDressSkirtAccessoryEnabled">false</bool>
+					<int64 name="CustomDressSkirtAccessoryId">0</int64>
+					<bool name="CustomJacketAccessoryEnabled">false</bool>
+					<int64 name="CustomJacketAccessoryId">0</int64>
+					<bool name="CustomLeftShoesAccessoryEnabled">false</bool>
+					<int64 name="CustomLeftShoesAccessoryId">0</int64>
+					<bool name="CustomPantsAccessoryEnabled">false</bool>
+					<int64 name="CustomPantsAccessoryId">0</int64>
+					<bool name="CustomRightShoesAccessoryEnabled">false</bool>
+					<int64 name="CustomRightShoesAccessoryId">0</int64>
+					<bool name="CustomShirtAccessoryEnabled">false</bool>
+					<int64 name="CustomShirtAccessoryId">0</int64>
+					<bool name="CustomShortsAccessoryEnabled">false</bool>
+					<int64 name="CustomShortsAccessoryId">0</int64>
+					<bool name="CustomSweaterAccessoryEnabled">false</bool>
+					<int64 name="CustomSweaterAccessoryId">0</int64>
+					<bool name="CustomTShirtAccessoryEnabled">false</bool>
+					<int64 name="CustomTShirtAccessoryId">0</int64>
+					<Vector3 name="LimitBounds">
+						<X>0</X>
+						<Y>0</Y>
+						<Z>0</Z>
+					</Vector3>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+					<string name="Name">AvatarClothingRules</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00002c20</UniqueId>
+				</Properties>
+			</Item>
+		</Item>
 	</Item>
 	<Item class="Packages" referent="RBX6703E56952AD47119ABFA39164EF2303">
 		<Properties>
@@ -5835,6 +6753,62 @@ return SongList]]></ProtectedString>
 					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00002081</UniqueId>
 				</Properties>
 			</Item>
+			<Item class="ModuleScript" referent="RBX03C38F9C17BC4B0E8FF4131A065FBF07">
+				<Properties>
+					<Content name="LinkedSource"><null></null></Content>
+					<ProtectedString name="Source"><![CDATA[-- ShopCatalog (PERMANENT)
+-- Configuration only. No purchase logic here. ShopServer is the sole
+-- authority on price/validity -- this module is read by both client
+-- (for display) and server (for validation), but only the server's
+-- read of it is trusted.
+
+local ShopCatalog = {
+	{
+		Id = "neon_blue",
+		Name = "Neon Blue",
+		Description = "A cool blue name glow.",
+		Type = "NameColor",
+		Price = 100,
+		DisplayColor = Color3.fromRGB(80, 170, 255),
+	},
+	{
+		Id = "neon_purple",
+		Name = "Neon Purple",
+		Description = "A vivid purple name glow.",
+		Type = "NameColor",
+		Price = 150,
+		DisplayColor = Color3.fromRGB(190, 100, 255),
+	},
+	{
+		Id = "dance_glow",
+		Name = "Dance Glow",
+		Description = "A soft glow that follows you on the floor.",
+		Type = "Aura",
+		Price = 250,
+		DisplayColor = Color3.fromRGB(255, 255, 255),
+	},
+	{
+		Id = "golden_vibe",
+		Name = "Golden Vibe",
+		Description = "A warm golden aura for VIP energy.",
+		Type = "Aura",
+		Price = 400,
+		DisplayColor = Color3.fromRGB(255, 200, 80),
+	},
+}
+
+return ShopCatalog]]></ProtectedString>
+					<string name="ScriptGuid">{00888B46-FD11-40AE-8641-BDACB4F4BA1F}</string>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+					<string name="Name">ShopCatalog</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+					<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00003843</UniqueId>
+				</Properties>
+			</Item>
 		</Item>
 		<Item class="Folder" referent="RBXE8AE4DE9BF7C425EA141617876CD5A42">
 			<Properties>
@@ -5903,12 +6877,13 @@ return SongList]]></ProtectedString>
 		<Item class="Script" referent="RBXE4669F3368EA44C393B7F0CADEB1668E">
 			<Properties>
 				<ProtectedString name="Source"><![CDATA[-- MusicServer (PERMANENT)
--- Server-authoritative music playback: creates/reuses MainSound and MusicStateChanged,
--- plays the SongList playlist in order, and advances automatically when a track ends.
--- Clients never choose the SoundId; this script is the only writer of playback state.
+-- Server-authoritative music playback: creates/reuses MainSound, MusicStateChanged and
+-- GetMusicState, plays the SongList playlist in order, and advances automatically when
+-- a track ends. Clients never choose the SoundId; this script is the only writer of state.
 
 local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local SongList = require(ReplicatedStorage.Modules.SongList)
 
@@ -5941,12 +6916,11 @@ else
 	print(LOG .. "Reusing existing MainSound.")
 end
 
--- Playlist looping is controlled by this script, not the Sound object.
 mainSound.Looped = false
 mainSound.Volume = 0.5
 
 -- ============================================================
--- Ensure MusicStateChanged RemoteEvent exists under ReplicatedStorage.Remotes
+-- Ensure ReplicatedStorage.Remotes exists
 -- ============================================================
 
 local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
@@ -5956,6 +6930,8 @@ if not remotesFolder then
 	remotesFolder.Parent = ReplicatedStorage
 	print(LOG .. "Created ReplicatedStorage.Remotes (was missing).")
 end
+
+-- ---- MusicStateChanged (RemoteEvent, outbound only) ----
 
 local musicStateChanged = remotesFolder:FindFirstChild("MusicStateChanged")
 if musicStateChanged and not musicStateChanged:IsA("RemoteEvent") then
@@ -5972,17 +6948,31 @@ else
 	print(LOG .. "Reusing existing MusicStateChanged RemoteEvent.")
 end
 
+-- ---- GetMusicState (RemoteFunction, read-only snapshot for late joiners) ----
+
+local getMusicState = remotesFolder:FindFirstChild("GetMusicState")
+if getMusicState and not getMusicState:IsA("RemoteFunction") then
+	warn(LOG .. "Remotes.GetMusicState exists but is a " .. getMusicState.ClassName .. ", not a RemoteFunction. Removing it.")
+	getMusicState:Destroy()
+	getMusicState = nil
+end
+if not getMusicState then
+	getMusicState = Instance.new("RemoteFunction")
+	getMusicState.Name = "GetMusicState"
+	getMusicState.Parent = remotesFolder
+	print(LOG .. "Created GetMusicState RemoteFunction.")
+else
+	print(LOG .. "Reusing existing GetMusicState RemoteFunction.")
+end
+
 -- ============================================================
 -- Playlist state (server-authoritative)
 -- ============================================================
 
 local currentIndex = 0 -- 0 means "nothing has played yet"
 
--- A minimal snapshot of the current track, kept for any future
--- "request current state on join" mechanism (Phase 4). We are not
--- building that request/response system yet, but keeping this table
--- up to date now means Phase 4 can read it without touching MusicServer's
--- playback logic.
+-- Public snapshot exposed to clients via MusicStateChanged and GetMusicState.
+-- Contains only display metadata -- no internal server details.
 local currentState = nil
 
 local function isValidTrack(track)
@@ -5995,10 +6985,6 @@ local function isValidTrack(track)
 	return true
 end
 
--- Finds the next valid track index after `fromIndex`, wrapping around the
--- playlist. Returns nil if no valid track exists anywhere in the playlist
--- (e.g. every entry is malformed), so the caller can fail safely instead
--- of looping forever.
 local function findNextValidIndex(fromIndex)
 	local count = #SongList
 	if count == 0 then
@@ -6013,17 +6999,42 @@ local function findNextValidIndex(fromIndex)
 	return nil
 end
 
-local playNextTrack -- forward declaration; playNextTrack and onTrackEnded call each other
+local playNextTrack -- forward declaration
 
 local function onTrackEnded()
 	print(LOG .. "Track ended: " .. (currentState and currentState.Title or "unknown"))
 	playNextTrack()
 end
 
--- Play() returns a promise-like object in newer Sound APIs is not guaranteed here,
--- so we rely on the Ended event (fires when playback finishes naturally) rather
--- than polling TimePosition. This is event-driven, not a busy loop.
 local endedConnection = nil
+
+-- Once the newly-selected Sound finishes loading, its TimeLength becomes
+-- accurate. We wait for that once per track and then patch Duration into
+-- the state and re-announce it, so the UI's progress bar has a real total
+-- to divide by. This does NOT fire every frame -- once per track, at most.
+local function announceDurationOnceLoaded(forTrackIndex, forSoundId)
+	if mainSound.IsLoaded and mainSound.TimeLength > 0 then
+		if currentState and currentState.TrackIndex == forTrackIndex and currentState.SoundId == forSoundId then
+			currentState.Duration = mainSound.TimeLength
+			musicStateChanged:FireAllClients(currentState)
+		end
+		return
+	end
+
+	local connection
+	connection = mainSound:GetPropertyChangedSignal("IsLoaded"):Connect(function()
+		if not mainSound.IsLoaded then
+			return
+		end
+		connection:Disconnect()
+		-- Only apply if this is still the current track (avoids a stale
+		-- late update overwriting a track that has since changed).
+		if currentState and currentState.TrackIndex == forTrackIndex and currentState.SoundId == forSoundId and mainSound.TimeLength > 0 then
+			currentState.Duration = mainSound.TimeLength
+			musicStateChanged:FireAllClients(currentState)
+		end
+	end)
+end
 
 function playNextTrack()
 	local nextIndex = findNextValidIndex(currentIndex)
@@ -6044,14 +7055,12 @@ function playNextTrack()
 	mainSound:Stop()
 	mainSound.SoundId = track.SoundId
 
-	local loadedOk, loadErr = pcall(function()
+	local playedOk, playErr = pcall(function()
 		mainSound:Play()
 	end)
 
-	if not loadedOk then
-		warn(LOG .. "Failed to play '" .. tostring(track.Title) .. "': " .. tostring(loadErr) .. ". Advancing to next track.")
-		-- Defer so we don't recurse synchronously inside pcall's error path,
-		-- and don't hammer a broken asset in a tight loop.
+	if not playedOk then
+		warn(LOG .. "Failed to play '" .. tostring(track.Title) .. "': " .. tostring(playErr) .. ". Advancing to next track.")
 		task.defer(function()
 			playNextTrack()
 		end)
@@ -6063,12 +7072,25 @@ function playNextTrack()
 		Title = track.Title,
 		Artist = track.Artist,
 		SoundId = track.SoundId,
+		Duration = (mainSound.IsLoaded and mainSound.TimeLength > 0) and mainSound.TimeLength or 0,
+		StartedAt = Workspace:GetServerTimeNow(),
 	}
 
 	print(LOG .. "Now playing: " .. tostring(track.Title))
 	musicStateChanged:FireAllClients(currentState)
 
+	announceDurationOnceLoaded(currentIndex, track.SoundId)
+
 	endedConnection = mainSound.Ended:Connect(onTrackEnded)
+end
+
+-- ============================================================
+-- GetMusicState: read-only snapshot for late-joining clients.
+-- Never accepts or trusts anything from the client beyond the call itself.
+-- ============================================================
+
+getMusicState.OnServerInvoke = function(_player)
+	return currentState
 end
 
 -- ============================================================
@@ -6092,6 +7114,300 @@ end]]></ProtectedString>
 				<int64 name="SourceAssetId">-1</int64>
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 				<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00002083</UniqueId>
+			</Properties>
+		</Item>
+		<Item class="Script" referent="RBX8E8E4FD849EC4B68BC2E7E817693B806">
+			<Properties>
+				<ProtectedString name="Source"><![CDATA[-- ShopServer (PERMANENT)
+-- Server-authoritative Coins, ownership, and equip state for the shop.
+-- DEVELOPMENT CURRENCY NOTICE: Coins are a session-only development
+-- currency. There is no DataStore persistence in Phase 5 -- balances,
+-- ownership, and equips reset whenever the server restarts. This is
+-- intentional and documented; production persistence is a later phase.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ShopCatalog = require(ReplicatedStorage.Modules.ShopCatalog)
+
+local LOG = "[ShopServer] "
+
+local STARTING_COINS = 1000 -- centrally configurable starting balance
+local RATE_LIMIT_SECONDS = 0.5 -- minimum time between a player's purchase/equip calls
+
+-- ============================================================
+-- Build a lookup table from the catalog for fast, authoritative validation.
+-- ============================================================
+
+local catalogById = {}
+for _, item in ipairs(ShopCatalog) do
+	catalogById[item.Id] = item
+end
+
+-- ============================================================
+-- Ensure ReplicatedStorage.Remotes exists (shared with MusicServer's folder)
+-- ============================================================
+
+local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+if not remotesFolder then
+	remotesFolder = Instance.new("Folder")
+	remotesFolder.Name = "Remotes"
+	remotesFolder.Parent = ReplicatedStorage
+	print(LOG .. "Created ReplicatedStorage.Remotes (was missing).")
+end
+
+local function ensureRemoteFunction(name)
+	local existing = remotesFolder:FindFirstChild(name)
+	if existing and not existing:IsA("RemoteFunction") then
+		warn(LOG .. "Remotes." .. name .. " exists but is a " .. existing.ClassName .. ", not a RemoteFunction. Removing it.")
+		existing:Destroy()
+		existing = nil
+	end
+	if not existing then
+		existing = Instance.new("RemoteFunction")
+		existing.Name = name
+		existing.Parent = remotesFolder
+		print(LOG .. "Created " .. name .. " RemoteFunction.")
+	else
+		print(LOG .. "Reusing existing " .. name .. " RemoteFunction.")
+	end
+	return existing
+end
+
+local getShopState = ensureRemoteFunction("GetShopState")
+local purchaseShopItem = ensureRemoteFunction("PurchaseShopItem")
+local equipShopItem = ensureRemoteFunction("EquipShopItem")
+
+-- ============================================================
+-- Per-player session state (NOT persisted -- resets on server restart)
+-- ============================================================
+
+local sessions = {} -- [player] = { Coins, OwnedItems = {[id]=true}, Equipped = {NameColor=id/nil, Aura=id/nil}, LastActionAt }
+
+local function newSession()
+	return {
+		Coins = STARTING_COINS,
+		OwnedItems = {},
+		Equipped = { NameColor = nil, Aura = nil },
+		LastActionAt = 0,
+	}
+end
+
+Players.PlayerAdded:Connect(function(player)
+	sessions[player] = newSession()
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	sessions[player] = nil
+end)
+
+-- Handle players already in-game if this script is running after they joined
+-- (e.g. during Studio Play testing where PlayerAdded may have already fired).
+for _, player in ipairs(Players:GetPlayers()) do
+	if not sessions[player] then
+		sessions[player] = newSession()
+	end
+end
+
+-- ============================================================
+-- Helpers
+-- ============================================================
+
+-- Returns a display-safe copy of a session's public state.
+local function publicState(session)
+	local ownedCopy = {}
+	for id in pairs(session.OwnedItems) do
+		ownedCopy[id] = true
+	end
+	return {
+		Coins = session.Coins,
+		OwnedItems = ownedCopy,
+		Equipped = {
+			NameColor = session.Equipped.NameColor,
+			Aura = session.Equipped.Aura,
+		},
+	}
+end
+
+-- Simple per-player rate limit shared by purchase/equip. Returns true if
+-- the action is allowed right now (and updates LastActionAt), false if
+-- the player is calling too fast.
+local function checkRateLimit(session)
+	local now = os.clock()
+	if now - session.LastActionAt < RATE_LIMIT_SECONDS then
+		return false
+	end
+	session.LastActionAt = now
+	return true
+end
+
+-- ============================================================
+-- GetShopState: read-only snapshot.
+-- ============================================================
+
+getShopState.OnServerInvoke = function(player)
+	local session = sessions[player]
+	if not session then
+		return { Coins = 0, OwnedItems = {}, Equipped = { NameColor = nil, Aura = nil } }
+	end
+	return publicState(session)
+end
+
+-- ============================================================
+-- PurchaseShopItem: client sends only an itemId. Server does everything else.
+-- ============================================================
+
+purchaseShopItem.OnServerInvoke = function(player, itemId)
+	local session = sessions[player]
+	if not session then
+		return { Success = false, Message = "Session not found." }
+	end
+
+	if not checkRateLimit(session) then
+		return { Success = false, Message = "Please wait." }
+	end
+
+	if type(itemId) ~= "string" or itemId == "" or #itemId > 64 then
+		warn(LOG .. player.Name .. " sent an invalid PurchaseShopItem itemId (type/shape rejected).")
+		return { Success = false, Message = "Invalid item." }
+	end
+
+	local item = catalogById[itemId]
+	if not item then
+		warn(LOG .. player.Name .. " attempted to purchase unknown item: " .. tostring(itemId))
+		return { Success = false, Message = "Item unavailable." }
+	end
+
+	if session.OwnedItems[itemId] then
+		return { Success = false, Message = "Already owned.", Coins = session.Coins, ItemId = itemId }
+	end
+
+	if session.Coins < item.Price then
+		return { Success = false, Message = "Not enough Coins.", Coins = session.Coins }
+	end
+
+	-- Validate fully above, then commit exactly once: deduct, then grant.
+	session.Coins -= item.Price
+	session.OwnedItems[itemId] = true
+
+	print(LOG .. player.Name .. " purchased " .. item.Name .. " for " .. item.Price .. " Coins.")
+
+	return {
+		Success = true,
+		Message = "Purchased " .. item.Name,
+		Coins = session.Coins,
+		ItemId = itemId,
+	}
+end
+
+-- ============================================================
+-- Minimal cosmetic application: Aura -> Highlight on the character.
+-- Lightweight, native, no particles. Reapplies on respawn.
+-- ============================================================
+
+local function applyAuraHighlight(player, character, itemId)
+	local existing = character:FindFirstChild("ShopAuraHighlight")
+	if existing then
+		existing:Destroy()
+	end
+
+	if not itemId then
+		return
+	end
+
+	local item = catalogById[itemId]
+	if not item or item.Type ~= "Aura" then
+		return
+	end
+
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "ShopAuraHighlight"
+	highlight.FillColor = item.DisplayColor or Color3.fromRGB(255, 255, 255)
+	highlight.FillTransparency = 0.7
+	highlight.OutlineColor = item.DisplayColor or Color3.fromRGB(255, 255, 255)
+	highlight.OutlineTransparency = 0.2
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+	highlight.Parent = character
+end
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function(character)
+		local session = sessions[player]
+		if session then
+			applyAuraHighlight(player, character, session.Equipped.Aura)
+		end
+	end)
+end)
+
+-- ============================================================
+-- EquipShopItem: client sends only an itemId. Server validates ownership/type,
+-- updates equipped state, and reapplies the Aura highlight in one place.
+-- ============================================================
+
+equipShopItem.OnServerInvoke = function(player, itemId)
+	local session = sessions[player]
+	if not session then
+		return { Success = false, Message = "Session not found." }
+	end
+
+	if not checkRateLimit(session) then
+		return { Success = false, Message = "Please wait." }
+	end
+
+	if type(itemId) ~= "string" or itemId == "" or #itemId > 64 then
+		warn(LOG .. player.Name .. " sent an invalid EquipShopItem itemId (type/shape rejected).")
+		return { Success = false, Message = "Invalid item." }
+	end
+
+	local item = catalogById[itemId]
+	if not item then
+		warn(LOG .. player.Name .. " attempted to equip unknown item: " .. tostring(itemId))
+		return { Success = false, Message = "Item unavailable." }
+	end
+
+	if not session.OwnedItems[itemId] then
+		return { Success = false, Message = "You don't own this item." }
+	end
+
+	if item.Type ~= "NameColor" and item.Type ~= "Aura" then
+		warn(LOG .. "Item " .. itemId .. " has an unrecognized Type: " .. tostring(item.Type))
+		return { Success = false, Message = "Item unavailable." }
+	end
+
+	-- One equipped item per category: this simply overwrites the previous
+	-- equipped id in that category, if any.
+	session.Equipped[item.Type] = itemId
+
+	print(LOG .. player.Name .. " equipped " .. item.Name .. " (" .. item.Type .. ").")
+
+	local character = player.Character
+	if character then
+		applyAuraHighlight(player, character, session.Equipped.Aura)
+	end
+
+	return {
+		Success = true,
+		Message = "Equipped " .. item.Name,
+		Equipped = {
+			NameColor = session.Equipped.NameColor,
+			Aura = session.Equipped.Aura,
+		},
+	}
+end
+
+print(LOG .. "ShopServer ready. Starting balance: " .. STARTING_COINS .. " Coins (session only, not persisted).")]]></ProtectedString>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<token name="RunContext">0</token>
+				<string name="ScriptGuid">{AB0C26B7-2252-4091-BB94-1FBE757A5697}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
+				<string name="Name">ShopServer</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+				<UniqueId name="UniqueId">5e384a12e8f2d67f0ac321be00003845</UniqueId>
 			</Properties>
 		</Item>
 	</Item>
