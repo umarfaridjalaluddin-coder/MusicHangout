@@ -1,10 +1,11 @@
 -- MusicServer (PERMANENT)
--- Server-authoritative music playback: creates/reuses MainSound and MusicStateChanged,
--- plays the SongList playlist in order, and advances automatically when a track ends.
--- Clients never choose the SoundId; this script is the only writer of playback state.
+-- Server-authoritative music playback: creates/reuses MainSound, MusicStateChanged and
+-- GetMusicState, plays the SongList playlist in order, and advances automatically when
+-- a track ends. Clients never choose the SoundId; this script is the only writer of state.
 
 local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local SongList = require(ReplicatedStorage.Modules.SongList)
 
@@ -37,12 +38,11 @@ else
 	print(LOG .. "Reusing existing MainSound.")
 end
 
--- Playlist looping is controlled by this script, not the Sound object.
 mainSound.Looped = false
 mainSound.Volume = 0.5
 
 -- ============================================================
--- Ensure MusicStateChanged RemoteEvent exists under ReplicatedStorage.Remotes
+-- Ensure ReplicatedStorage.Remotes exists
 -- ============================================================
 
 local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
@@ -52,6 +52,8 @@ if not remotesFolder then
 	remotesFolder.Parent = ReplicatedStorage
 	print(LOG .. "Created ReplicatedStorage.Remotes (was missing).")
 end
+
+-- ---- MusicStateChanged (RemoteEvent, outbound only) ----
 
 local musicStateChanged = remotesFolder:FindFirstChild("MusicStateChanged")
 if musicStateChanged and not musicStateChanged:IsA("RemoteEvent") then
@@ -68,17 +70,31 @@ else
 	print(LOG .. "Reusing existing MusicStateChanged RemoteEvent.")
 end
 
+-- ---- GetMusicState (RemoteFunction, read-only snapshot for late joiners) ----
+
+local getMusicState = remotesFolder:FindFirstChild("GetMusicState")
+if getMusicState and not getMusicState:IsA("RemoteFunction") then
+	warn(LOG .. "Remotes.GetMusicState exists but is a " .. getMusicState.ClassName .. ", not a RemoteFunction. Removing it.")
+	getMusicState:Destroy()
+	getMusicState = nil
+end
+if not getMusicState then
+	getMusicState = Instance.new("RemoteFunction")
+	getMusicState.Name = "GetMusicState"
+	getMusicState.Parent = remotesFolder
+	print(LOG .. "Created GetMusicState RemoteFunction.")
+else
+	print(LOG .. "Reusing existing GetMusicState RemoteFunction.")
+end
+
 -- ============================================================
 -- Playlist state (server-authoritative)
 -- ============================================================
 
 local currentIndex = 0 -- 0 means "nothing has played yet"
 
--- A minimal snapshot of the current track, kept for any future
--- "request current state on join" mechanism (Phase 4). We are not
--- building that request/response system yet, but keeping this table
--- up to date now means Phase 4 can read it without touching MusicServer's
--- playback logic.
+-- Public snapshot exposed to clients via MusicStateChanged and GetMusicState.
+-- Contains only display metadata -- no internal server details.
 local currentState = nil
 
 local function isValidTrack(track)
@@ -91,10 +107,6 @@ local function isValidTrack(track)
 	return true
 end
 
--- Finds the next valid track index after `fromIndex`, wrapping around the
--- playlist. Returns nil if no valid track exists anywhere in the playlist
--- (e.g. every entry is malformed), so the caller can fail safely instead
--- of looping forever.
 local function findNextValidIndex(fromIndex)
 	local count = #SongList
 	if count == 0 then
@@ -109,17 +121,42 @@ local function findNextValidIndex(fromIndex)
 	return nil
 end
 
-local playNextTrack -- forward declaration; playNextTrack and onTrackEnded call each other
+local playNextTrack -- forward declaration
 
 local function onTrackEnded()
 	print(LOG .. "Track ended: " .. (currentState and currentState.Title or "unknown"))
 	playNextTrack()
 end
 
--- Play() returns a promise-like object in newer Sound APIs is not guaranteed here,
--- so we rely on the Ended event (fires when playback finishes naturally) rather
--- than polling TimePosition. This is event-driven, not a busy loop.
 local endedConnection = nil
+
+-- Once the newly-selected Sound finishes loading, its TimeLength becomes
+-- accurate. We wait for that once per track and then patch Duration into
+-- the state and re-announce it, so the UI's progress bar has a real total
+-- to divide by. This does NOT fire every frame -- once per track, at most.
+local function announceDurationOnceLoaded(forTrackIndex, forSoundId)
+	if mainSound.IsLoaded and mainSound.TimeLength > 0 then
+		if currentState and currentState.TrackIndex == forTrackIndex and currentState.SoundId == forSoundId then
+			currentState.Duration = mainSound.TimeLength
+			musicStateChanged:FireAllClients(currentState)
+		end
+		return
+	end
+
+	local connection
+	connection = mainSound:GetPropertyChangedSignal("IsLoaded"):Connect(function()
+		if not mainSound.IsLoaded then
+			return
+		end
+		connection:Disconnect()
+		-- Only apply if this is still the current track (avoids a stale
+		-- late update overwriting a track that has since changed).
+		if currentState and currentState.TrackIndex == forTrackIndex and currentState.SoundId == forSoundId and mainSound.TimeLength > 0 then
+			currentState.Duration = mainSound.TimeLength
+			musicStateChanged:FireAllClients(currentState)
+		end
+	end)
+end
 
 function playNextTrack()
 	local nextIndex = findNextValidIndex(currentIndex)
@@ -140,14 +177,12 @@ function playNextTrack()
 	mainSound:Stop()
 	mainSound.SoundId = track.SoundId
 
-	local loadedOk, loadErr = pcall(function()
+	local playedOk, playErr = pcall(function()
 		mainSound:Play()
 	end)
 
-	if not loadedOk then
-		warn(LOG .. "Failed to play '" .. tostring(track.Title) .. "': " .. tostring(loadErr) .. ". Advancing to next track.")
-		-- Defer so we don't recurse synchronously inside pcall's error path,
-		-- and don't hammer a broken asset in a tight loop.
+	if not playedOk then
+		warn(LOG .. "Failed to play '" .. tostring(track.Title) .. "': " .. tostring(playErr) .. ". Advancing to next track.")
 		task.defer(function()
 			playNextTrack()
 		end)
@@ -159,12 +194,25 @@ function playNextTrack()
 		Title = track.Title,
 		Artist = track.Artist,
 		SoundId = track.SoundId,
+		Duration = (mainSound.IsLoaded and mainSound.TimeLength > 0) and mainSound.TimeLength or 0,
+		StartedAt = Workspace:GetServerTimeNow(),
 	}
 
 	print(LOG .. "Now playing: " .. tostring(track.Title))
 	musicStateChanged:FireAllClients(currentState)
 
+	announceDurationOnceLoaded(currentIndex, track.SoundId)
+
 	endedConnection = mainSound.Ended:Connect(onTrackEnded)
+end
+
+-- ============================================================
+-- GetMusicState: read-only snapshot for late-joining clients.
+-- Never accepts or trusts anything from the client beyond the call itself.
+-- ============================================================
+
+getMusicState.OnServerInvoke = function(_player)
+	return currentState
 end
 
 -- ============================================================
