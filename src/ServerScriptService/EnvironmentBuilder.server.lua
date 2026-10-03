@@ -349,7 +349,7 @@ if photoZone then
 		Vector3.new(15, 10, 0.5),
 		Vector3.new(-90, 7, -77.5),
 		Vector3.new(0, 0, 0),
-		"MUSIC HANGOUT",
+		"HAPPY BIRTHDAY QISYA",
 		COLOR_MAGENTA,
 		Color3.fromRGB(10, 10, 14),
 		Enum.NormalId.Back
@@ -374,7 +374,7 @@ if lobbyZone then
 		Vector3.new(14, 3, 0.4),
 		Vector3.new(0, 11, -19),
 		Vector3.new(0, 0, 0),
-		"MUSIC HANGOUT",
+		"QISYA'S PARTY",
 		COLOR_CYAN,
 		Color3.fromRGB(10, 10, 14),
 		Enum.NormalId.Back
