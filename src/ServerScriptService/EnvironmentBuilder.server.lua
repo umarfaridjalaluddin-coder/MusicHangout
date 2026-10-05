@@ -273,25 +273,9 @@ if vipZone then
 end
 
 -- ============================================================
--- SHOP: kiosk counter, display wall
+-- SHOP AREA: no shop decor is built here any more. ZooBuilder.server.lua
+-- builds the mini zoo on this spot. (ShopFloor is still restyled above.)
 -- ============================================================
-
-if shopZone then
-	-- ShopFloor center (-90,1.5,0), spans X[-105,-75] Z[-15,15]
-	part(fShopDecor, "KioskCounter", Vector3.new(10, 3, 2), Vector3.new(-90, 3, 8), { Material = MAT_STRUCTURE, Color = COLOR_CHARCOAL, CanCollide = true })
-	surfaceLabel(
-		fShopDecor,
-		"ShopDisplayWall",
-		Vector3.new(14, 6, 0.5),
-		Vector3.new(-90, 6, 12),
-		Vector3.new(0, 0, 0),
-		"SHOP",
-		COLOR_WARM,
-		Color3.fromRGB(10, 10, 14)
-	)
-	part(fShopDecor, "DisplayBlockA", Vector3.new(2, 2, 2), Vector3.new(-95, 3, 4), { Material = MAT_PANEL, Color = COLOR_METAL, CanCollide = false })
-	part(fShopDecor, "DisplayBlockB", Vector3.new(2, 2, 2), Vector3.new(-85, 3, 4), { Material = MAT_PANEL, Color = COLOR_METAL, CanCollide = false })
-end
 
 -- ============================================================
 -- OUTDOOR: benches, simple trees, planters, railing
