@@ -1,8 +1,10 @@
 -- MathQuizClient (PERMANENT)
--- The on-screen part of the Math Quiz. The server (MathQuiz) sends one
--- question at a time with four choices; this script shows it, sends back the
--- choice the player taps, and shows whether it was right. The correct answer
--- is only revealed by the server after the player has answered.
+-- The on-screen panel for both quiz corners: the maths quiz (MathQuiz) and
+-- the Bahasa Melayu quiz (MalayQuiz). Each server script sends one question
+-- at a time with four choices over its own remote; this script shows it,
+-- sends back the choice the player taps, and shows whether it was right. The
+-- correct answer is only revealed by the server after the player has answered.
+-- The panel's own wording (buttons, feedback) follows the quiz's language.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,10 +13,43 @@ local WAIT_SECONDS = 60
 local player = Players.LocalPlayer
 
 local remotes = ReplicatedStorage:WaitForChild("Remotes", WAIT_SECONDS)
-local quizRemote = remotes and remotes:WaitForChild("MathQuiz", WAIT_SECONDS)
-if not quizRemote then
+if not remotes then
 	return
 end
+
+-- One entry per quiz: the remote's name and the panel's wording.
+local QUIZZES = {
+	{
+		Remote = "MathQuiz",
+		Header = "MATH QUIZ   Question %d of %d",
+		Finished = "MATH QUIZ   Finished!",
+		Close = "CLOSE",
+		Again = "PLAY AGAIN",
+		Checking = "Checking...",
+		Correct = "Correct! Well done.",
+		Wrong = "Not quite. The answer is %s.",
+		Score = "You scored %d out of %d",
+		Stars = "You earned %d star(s).",
+		Loading = "Getting your questions...",
+		StayNear = "Stay near the teacher's desk to start.",
+		Praise = { "Perfect score! Amazing!", "Great work!", "Good try!", "Keep practising, you can do it!" },
+	},
+	{
+		Remote = "MalayQuiz",
+		Header = "KUIZ BAHASA MELAYU   Soalan %d daripada %d",
+		Finished = "KUIZ BAHASA MELAYU   Tamat!",
+		Close = "TUTUP",
+		Again = "MAIN LAGI",
+		Checking = "Sedang menyemak...",
+		Correct = "Betul! Syabas.",
+		Wrong = "Kurang tepat. Jawapannya ialah %s.",
+		Score = "Markah kamu %d daripada %d",
+		Stars = "Kamu mendapat %d bintang.",
+		Loading = "Sedang menyediakan soalan...",
+		StayNear = "Berdiri dekat meja guru untuk mula.",
+		Praise = { "Markah penuh! Hebat!", "Syabas, bagus sekali!", "Cubaan yang baik!", "Teruskan berlatih, kamu boleh!" },
+	},
+}
 
 local PANEL = Color3.fromRGB(24, 26, 38)
 local CHOICE = Color3.fromRGB(70, 110, 200)
@@ -134,9 +169,10 @@ corner(againButton, 12)
 gui.Parent = player:WaitForChild("PlayerGui")
 
 -- ============================================================
--- Behaviour
+-- Behaviour. `active` is the quiz the panel is currently showing.
 -- ============================================================
 
+local active = nil -- { words = entry from QUIZZES, remote = RemoteEvent }
 local canAnswer = false
 local chosen = nil
 
@@ -146,11 +182,15 @@ local function showChoices(visible)
 	end
 end
 
-local function onQuestion(data)
+local function onQuestion(quiz, data)
+	active = quiz
+	local words = quiz.words
 	gui.Enabled = true
 	againButton.Visible = false
+	closeButton.Text = words.Close
+	againButton.Text = words.Again
 	showChoices(true)
-	header.Text = string.format("MATH QUIZ   Question %d of %d", data.Number, data.Total)
+	header.Text = string.format(words.Header, data.Number, data.Total)
 	topic.Text = tostring(data.Topic or "")
 	question.Text = tostring(data.Text or "")
 	feedback.Text = ""
@@ -162,7 +202,11 @@ local function onQuestion(data)
 	canAnswer = true
 end
 
-local function onResult(data)
+local function onResult(quiz, data)
+	if active ~= quiz then
+		return
+	end
+	local words = quiz.words
 	for index, button in ipairs(choiceButtons) do
 		if index == data.CorrectIndex then
 			button.BackgroundColor3 = RIGHT
@@ -174,68 +218,88 @@ local function onResult(data)
 	end
 	if data.Correct then
 		feedback.TextColor3 = RIGHT
-		feedback.Text = "Correct! Well done."
+		feedback.Text = words.Correct
 	else
 		feedback.TextColor3 = WRONG
-		feedback.Text = "Not quite. The answer is " .. LETTERS[data.CorrectIndex] .. "."
+		feedback.Text = string.format(words.Wrong, LETTERS[data.CorrectIndex] or "?")
 	end
 end
 
-local function onFinished(data)
+local function onFinished(quiz, data)
+	if active ~= quiz then
+		return
+	end
+	local words = quiz.words
 	canAnswer = false
 	showChoices(false)
-	header.Text = "MATH QUIZ   Finished!"
+	header.Text = words.Finished
 	topic.Text = ""
-	local praise = "Keep practising, you can do it!"
+	local praise = words.Praise[4]
 	if data.Score == data.Total then
-		praise = "Perfect score! Amazing!"
+		praise = words.Praise[1]
 	elseif data.Score >= data.Total * 0.7 then
-		praise = "Great work!"
+		praise = words.Praise[2]
 	elseif data.Score >= data.Total * 0.5 then
-		praise = "Good try!"
+		praise = words.Praise[3]
 	end
-	question.Text = string.format("You scored %d out of %d\n%s", data.Score, data.Total, praise)
+	question.Text = string.format(words.Score, data.Score, data.Total) .. "\n" .. praise
 	feedback.TextColor3 = Color3.fromRGB(255, 236, 150)
-	feedback.Text = string.format("You earned %d star(s).", data.Stars)
+	feedback.Text = string.format(words.Stars, data.Stars)
 	againButton.Visible = true
 end
 
 for index, button in ipairs(choiceButtons) do
 	button.Activated:Connect(function()
-		if not canAnswer then
+		if not canAnswer or not active then
 			return
 		end
 		canAnswer = false
 		chosen = index
 		button.BackgroundColor3 = FADED
 		feedback.TextColor3 = TEXT
-		feedback.Text = "Checking..."
-		quizRemote:FireServer("Answer", index)
+		feedback.Text = active.words.Checking
+		active.remote:FireServer("Answer", index)
 	end)
 end
 
 closeButton.Activated:Connect(function()
 	canAnswer = false
 	gui.Enabled = false
-	quizRemote:FireServer("Quit")
+	if active then
+		active.remote:FireServer("Quit")
+	end
 end)
 
 againButton.Activated:Connect(function()
-	againButton.Visible = false
-	question.Text = "Getting your questions..."
-	feedback.Text = "Stay near the teacher's desk to start."
-	quizRemote:FireServer("Start")
-end)
-
-quizRemote.OnClientEvent:Connect(function(kind, data)
-	if type(data) ~= "table" then
+	if not active then
 		return
 	end
-	if kind == "Question" then
-		onQuestion(data)
-	elseif kind == "Result" then
-		onResult(data)
-	elseif kind == "Finished" then
-		onFinished(data)
-	end
+	againButton.Visible = false
+	question.Text = active.words.Loading
+	feedback.Text = active.words.StayNear
+	active.remote:FireServer("Start")
 end)
+
+-- Connect each quiz as its remote appears. A quiz whose server script is not
+-- in the game is simply skipped.
+for _, words in ipairs(QUIZZES) do
+	task.spawn(function()
+		local remote = remotes:WaitForChild(words.Remote, WAIT_SECONDS)
+		if not remote then
+			return
+		end
+		local quiz = { words = words, remote = remote }
+		remote.OnClientEvent:Connect(function(kind, data)
+			if type(data) ~= "table" then
+				return
+			end
+			if kind == "Question" then
+				onQuestion(quiz, data)
+			elseif kind == "Result" then
+				onResult(quiz, data)
+			elseif kind == "Finished" then
+				onFinished(quiz, data)
+			end
+		end)
+	end)
+end
