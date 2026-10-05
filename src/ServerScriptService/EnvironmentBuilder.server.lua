@@ -167,7 +167,7 @@ if djZone then
 	restyleExisting(djZone, "DJDeskTop", MAT_STRUCTURE, COLOR_METAL)
 end
 if vipZone then
-	restyleExisting(vipZone, "VIPFloor", MAT_PANEL, COLOR_DARKGREY)
+	restyleExisting(vipZone, "VIPFloor", MAT_PANEL, Color3.fromRGB(186, 168, 224)) -- pastel lavender, matches the dress-up booth
 end
 if shopZone then
 	restyleExisting(shopZone, "ShopFloor", MAT_PANEL, COLOR_DARKGREY)
@@ -252,24 +252,24 @@ end
 
 if vipZone then
 	-- VIPFloor spans X[80,120] Z[-80,-40], top Y=2. Raised inner platform:
-	part(fVIPDecor, "VIPPlatform", Vector3.new(24, 1, 24), Vector3.new(100, 2.5, -60), { Material = MAT_PANEL, Color = COLOR_CHARCOAL, CanCollide = true })
+	part(fVIPDecor, "VIPPlatform", Vector3.new(24, 1, 24), Vector3.new(100, 2.5, -60), { Material = MAT_PANEL, Color = Color3.fromRGB(226, 212, 240), CanCollide = true })
 
 	-- Simple two-part sofas (seat + back) on two sides of a central table
 	local function sofa(name, pos, orientationY)
-		local seat = part(fVIPDecor, name .. "Seat", Vector3.new(6, 1.2, 2.5), pos, { Material = MAT_PANEL, Color = COLOR_METAL, CanCollide = true })
+		local seat = part(fVIPDecor, name .. "Seat", Vector3.new(6, 1.2, 2.5), pos, { Material = MAT_PANEL, Color = Color3.fromRGB(232, 168, 200), CanCollide = true })
 		seat.Orientation = Vector3.new(0, orientationY, 0)
 		local backPos = pos + (CFrame.Angles(0, math.rad(orientationY), 0) * Vector3.new(0, 1.2, -1.1))
-		local back = part(fVIPDecor, name .. "Back", Vector3.new(6, 2.2, 0.3), backPos, { Material = MAT_PANEL, Color = COLOR_METAL, CanCollide = true })
+		local back = part(fVIPDecor, name .. "Back", Vector3.new(6, 2.2, 0.3), backPos, { Material = MAT_PANEL, Color = Color3.fromRGB(214, 146, 184), CanCollide = true })
 		back.Orientation = Vector3.new(0, orientationY, 0)
 	end
 
 	sofa("SofaNorth", Vector3.new(100, 3.6, -70), 0)
 	sofa("SofaSouth", Vector3.new(100, 3.6, -50), 180)
 
-	part(fVIPDecor, "VIPTable", Vector3.new(4, 1.5, 4), Vector3.new(100, 3.75, -60), { Material = MAT_STRUCTURE, Color = COLOR_DARKGREY, CanCollide = true })
+	part(fVIPDecor, "VIPTable", Vector3.new(4, 1.5, 4), Vector3.new(100, 3.75, -60), { Material = MAT_PANEL, Color = Color3.fromRGB(232, 218, 208), CanCollide = true })
 
 	-- Perimeter accent trim on the VIP floor edge
-	part(fVIPDecor, "VIPTrim", Vector3.new(40, 0.2, 0.5), Vector3.new(100, 2.1, -80), { Material = MAT_NEON, Color = COLOR_WARM })
+	part(fVIPDecor, "VIPTrim", Vector3.new(40, 0.2, 0.5), Vector3.new(100, 2.1, -80), { Material = MAT_PANEL, Color = Color3.fromRGB(226, 190, 110) })
 end
 
 -- ============================================================
@@ -385,16 +385,49 @@ pathStrip("PathToOutdoor", Vector3.new(0, 1.05, 35), Vector3.new(4, 0.1, 30))
 pathStrip("PathToPhotoSpot", Vector3.new(-55, 1.05, -45), Vector3.new(4, 0.1, 50))
 
 -- ============================================================
--- LIGHTING: evening venue atmosphere, ensured idempotently
+-- LIGHTING: day or evening, ensured idempotently
 -- ============================================================
 
-Lighting.ClockTime = 20
-Lighting.Brightness = 1.5
--- Ambient raised so dark floors and furniture stay readable at night.
-Lighting.Ambient = Color3.fromRGB(80, 80, 100)
-Lighting.OutdoorAmbient = Color3.fromRGB(90, 90, 115)
-Lighting.ExposureCompensation = 0.2
+-- true = sunny daytime park. false = the original evening venue look.
+local DAYTIME = true
+
+if DAYTIME then
+	Lighting.ClockTime = 14
+	Lighting.Brightness = 2
+	Lighting.Ambient = Color3.fromRGB(125, 125, 135)
+	Lighting.OutdoorAmbient = Color3.fromRGB(150, 150, 160)
+	-- Lower exposure than the evening look so pale surfaces do not wash out in sun.
+	Lighting.ExposureCompensation = -0.1
+else
+	Lighting.ClockTime = 20
+	Lighting.Brightness = 1.5
+	-- Ambient raised so dark floors and furniture stay readable at night.
+	Lighting.Ambient = Color3.fromRGB(80, 80, 100)
+	Lighting.OutdoorAmbient = Color3.fromRGB(90, 90, 115)
+	Lighting.ExposureCompensation = 0.2
+end
 Lighting.FogEnd = 1500
+
+-- Daytime ground: the big base slab becomes grass. It is found by name, or
+-- failing that as the one very large flat part sitting directly in Workspace.
+if DAYTIME then
+	local ground = Workspace:FindFirstChild("Ground") or Workspace:FindFirstChild("Baseplate")
+	if not (ground and ground:IsA("BasePart")) then
+		ground = nil
+		for _, child in ipairs(Workspace:GetChildren()) do
+			if child:IsA("BasePart") and child.Size.X >= 250 and child.Size.Z >= 250 and child.Size.Y <= 10 then
+				ground = child
+				break
+			end
+		end
+	end
+	if ground then
+		ground.Material = Enum.Material.Grass
+		ground.Color = Color3.fromRGB(122, 190, 112)
+	else
+		warn(LOG .. "Ground slab not found; the ground colour was left as it is.")
+	end
+end
 
 local atmosphere = Lighting:FindFirstChild("Atmosphere")
 if not atmosphere then
@@ -405,10 +438,10 @@ if not atmosphere then
 end
 atmosphere.Density = 0.25
 atmosphere.Offset = 0.2
-atmosphere.Color = Color3.fromRGB(180, 190, 210)
-atmosphere.Decay = Color3.fromRGB(60, 65, 80)
+atmosphere.Color = DAYTIME and Color3.fromRGB(199, 220, 240) or Color3.fromRGB(180, 190, 210)
+atmosphere.Decay = DAYTIME and Color3.fromRGB(110, 118, 130) or Color3.fromRGB(60, 65, 80)
 atmosphere.Glare = 0.1
-atmosphere.Haze = 1.2
+atmosphere.Haze = DAYTIME and 0.5 or 1.2
 
 local colorCorrection = Lighting:FindFirstChild("Atmosphere_ColorCorrection")
 if not colorCorrection then
@@ -420,7 +453,7 @@ end
 colorCorrection.Brightness = 0
 colorCorrection.Contrast = 0.1
 colorCorrection.Saturation = 0.1
-colorCorrection.TintColor = Color3.fromRGB(240, 245, 255)
+colorCorrection.TintColor = DAYTIME and Color3.fromRGB(255, 251, 246) or Color3.fromRGB(240, 245, 255)
 
 local bloom = Lighting:FindFirstChild("Atmosphere_Bloom")
 if not bloom then
@@ -429,8 +462,9 @@ if not bloom then
 	bloom.Parent = Lighting
 	print(LOG .. "Created Lighting.BloomEffect.")
 end
-bloom.Intensity = 0.6
-bloom.Size = 24
-bloom.Threshold = 1.5 -- keeps bloom restrained to bright neon, not everything
+-- In daylight the neon glow is turned well down; the evening look keeps the stronger glow.
+bloom.Intensity = DAYTIME and 0.15 or 0.6
+bloom.Size = DAYTIME and 14 or 24
+bloom.Threshold = DAYTIME and 2.2 or 1.5 -- keeps bloom restrained to bright neon, not everything
 
 print(LOG .. "EnvironmentBuilder complete.")

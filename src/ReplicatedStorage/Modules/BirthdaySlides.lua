@@ -11,7 +11,7 @@ local BirthdaySlides = {
 	-- Lines of the code-only show, displayed one at a time in this order.
 	Messages = {
 		"HAPPY BIRTHDAY",
-		"QISYA AZ-ZAHRA",
+		"QISYA",
 		"DARIPADA BABA",
 	},
 	MessageSeconds = 4, -- how long each line stays on screen
