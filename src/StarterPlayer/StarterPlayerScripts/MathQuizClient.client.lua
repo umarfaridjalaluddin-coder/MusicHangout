@@ -1,9 +1,11 @@
 -- MathQuizClient (PERMANENT)
 -- The on-screen panel for both quiz corners: the maths quiz (MathQuiz) and
--- the Bahasa Melayu quiz (MalayQuiz). Each server script sends one question
--- at a time with four choices over its own remote; this script shows it,
--- sends back the choice the player taps, and shows whether it was right. The
--- correct answer is only revealed by the server after the player has answered.
+-- the Bahasa Melayu quiz (MalayQuiz). Each server script first offers a list
+-- of levels (Darjah 5, Darjah 6, Tingkatan 1, Tingkatan 2, Tingkatan 3); once
+-- the player picks one, it sends one question at a time with four choices
+-- over its own remote; this script shows it, sends back the choice the
+-- player taps, and shows whether it was right. The correct answer is only
+-- revealed by the server after the player has answered.
 -- The panel's own wording (buttons, feedback) follows the quiz's language.
 
 local Players = game:GetService("Players")
@@ -23,6 +25,8 @@ local QUIZZES = {
 		Remote = "MathQuiz",
 		Header = "MATH QUIZ   Question %d of %d",
 		Finished = "MATH QUIZ   Finished!",
+		LevelHeader = "MATH QUIZ   Choose your level",
+		LevelPrompt = "Pick a level to begin:",
 		Close = "CLOSE",
 		Again = "PLAY AGAIN",
 		Checking = "Checking...",
@@ -38,6 +42,8 @@ local QUIZZES = {
 		Remote = "MalayQuiz",
 		Header = "KUIZ BAHASA MELAYU   Soalan %d daripada %d",
 		Finished = "KUIZ BAHASA MELAYU   Tamat!",
+		LevelHeader = "KUIZ BAHASA MELAYU   Pilih tahap anda",
+		LevelPrompt = "Pilih satu tahap untuk mula:",
 		Close = "TUTUP",
 		Again = "MAIN LAGI",
 		Checking = "Sedang menyemak...",
@@ -53,11 +59,13 @@ local QUIZZES = {
 
 local PANEL = Color3.fromRGB(24, 26, 38)
 local CHOICE = Color3.fromRGB(70, 110, 200)
+local LEVEL_COLOR = Color3.fromRGB(150, 90, 210)
 local RIGHT = Color3.fromRGB(70, 180, 110)
 local WRONG = Color3.fromRGB(215, 80, 90)
 local FADED = Color3.fromRGB(60, 64, 80)
 local TEXT = Color3.fromRGB(255, 255, 255)
 local LETTERS = { "A", "B", "C", "D" }
+local MAX_LEVELS = 5
 
 -- ============================================================
 -- Screen elements
@@ -150,6 +158,33 @@ for index = 1, 4 do
 	choiceButtons[index] = button
 end
 
+-- Level-picker buttons: same slots as the choice buttons, shown instead of
+-- them while the player is choosing a level.
+local levelButtons = {}
+for index = 1, MAX_LEVELS do
+	local button = Instance.new("TextButton")
+	button.Name = "Level" .. index
+	button.Position = UDim2.fromScale(0.05, 0.36 + (index - 1) * 0.1)
+	button.Size = UDim2.fromScale(0.9, 0.09)
+	button.BackgroundColor3 = LEVEL_COLOR
+	button.BorderSizePixel = 0
+	button.Font = Enum.Font.GothamBold
+	button.TextColor3 = TEXT
+	button.TextScaled = true
+	button.TextWrapped = true
+	button.Text = ""
+	button.Visible = false
+	button.Parent = panel
+	corner(button, 12)
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0.03, 0)
+	padding.PaddingRight = UDim.new(0.03, 0)
+	padding.PaddingTop = UDim.new(0.14, 0)
+	padding.PaddingBottom = UDim.new(0.14, 0)
+	padding.Parent = button
+	levelButtons[index] = button
+end
+
 -- Shown on the last screen only.
 local againButton = Instance.new("TextButton")
 againButton.Name = "PlayAgain"
@@ -182,6 +217,34 @@ local function showChoices(visible)
 	end
 end
 
+local function showLevels(visible, levels)
+	for index, button in ipairs(levelButtons) do
+		local level = levels and levels[index]
+		if visible and level then
+			button.Text = level
+			button.Visible = true
+		else
+			button.Visible = false
+		end
+	end
+end
+
+local function onLevels(quiz, data)
+	active = quiz
+	local words = quiz.words
+	gui.Enabled = true
+	againButton.Visible = false
+	closeButton.Text = words.Close
+	showChoices(false)
+	header.Text = words.LevelHeader
+	topic.Text = ""
+	question.Text = words.LevelPrompt
+	feedback.Text = ""
+	chosen = nil
+	canAnswer = false
+	showLevels(true, data.Levels)
+end
+
 local function onQuestion(quiz, data)
 	active = quiz
 	local words = quiz.words
@@ -189,9 +252,10 @@ local function onQuestion(quiz, data)
 	againButton.Visible = false
 	closeButton.Text = words.Close
 	againButton.Text = words.Again
+	showLevels(false)
 	showChoices(true)
 	header.Text = string.format(words.Header, data.Number, data.Total)
-	topic.Text = tostring(data.Topic or "")
+	topic.Text = (data.Level and (data.Level .. " - ") or "") .. tostring(data.Topic or "")
 	question.Text = tostring(data.Text or "")
 	feedback.Text = ""
 	for index, button in ipairs(choiceButtons) do
@@ -232,8 +296,9 @@ local function onFinished(quiz, data)
 	local words = quiz.words
 	canAnswer = false
 	showChoices(false)
+	showLevels(false)
 	header.Text = words.Finished
-	topic.Text = ""
+	topic.Text = tostring(data.Level or "")
 	local praise = words.Praise[4]
 	if data.Score == data.Total then
 		praise = words.Praise[1]
@@ -259,6 +324,22 @@ for index, button in ipairs(choiceButtons) do
 		feedback.TextColor3 = TEXT
 		feedback.Text = active.words.Checking
 		active.remote:FireServer("Answer", index)
+	end)
+end
+
+for _, button in ipairs(levelButtons) do
+	button.Activated:Connect(function()
+		if not active then
+			return
+		end
+		local level = button.Text
+		if level == "" then
+			return
+		end
+		showLevels(false)
+		question.Text = active.words.Loading
+		feedback.Text = active.words.StayNear
+		active.remote:FireServer("ChooseLevel", level)
 	end)
 end
 
@@ -293,7 +374,9 @@ for _, words in ipairs(QUIZZES) do
 			if type(data) ~= "table" then
 				return
 			end
-			if kind == "Question" then
+			if kind == "Levels" then
+				onLevels(quiz, data)
+			elseif kind == "Question" then
 				onQuestion(quiz, data)
 			elseif kind == "Result" then
 				onResult(quiz, data)

@@ -1,10 +1,11 @@
 -- MathQuiz (PERMANENT)
 -- A maths quiz corner west of the lobby, under Workspace.Environment.MathCorner.
--- A player walks to the teacher's desk and starts a quiz: 10 multiple-choice
--- questions drawn at random from MathQuestions (Year 5 topics). The questions
+-- A player walks to the teacher's desk and picks a level (Darjah 5, Darjah 6,
+-- Tingkatan 1, Tingkatan 2 or Tingkatan 3); then 10 multiple-choice questions
+-- are drawn at random from that level only (MathQuestions). The questions
 -- appear on that player's screen (see MathQuizClient in StarterPlayerScripts).
--- The server chooses the questions, keeps the answers and does the marking, so
--- answers are never sent to a player's device before they answer.
+-- The server chooses the level and questions, keeps the answers and does the
+-- marking, so answers are never sent to a player's device before they answer.
 -- Each correct answer earns 1 Star, with a bonus for a perfect score. A board
 -- shows the last and best scores of the session.
 -- Idempotent: every part is found by name or created. Adds only its own objects.
@@ -16,6 +17,8 @@ local Workspace = game:GetService("Workspace")
 local QUESTIONS = require(script.Parent:WaitForChild("MathQuestions"))
 
 local LOG = "[MathQuiz] "
+
+local LEVELS = { "Darjah 5", "Darjah 6", "Tingkatan 1", "Tingkatan 2", "Tingkatan 3" }
 
 local QUESTIONS_PER_QUIZ = 10
 local PERFECT_BONUS = 5
@@ -113,7 +116,7 @@ local boardPosition = Vector3.new(CX - 10.5, FLOOR_TOP + 6, CZ)
 local facingLobby = CFrame.lookAt(boardPosition, boardPosition + Vector3.xAxis)
 block(corner, "BlackboardFrame", Vector3.new(15, 7, 0.4), facingLobby * CFrame.new(0, 0, 0.25), WOOD)
 local blackboard = block(corner, "Blackboard", Vector3.new(14, 6, 0.3), facingLobby, BOARD, false)
-addText(blackboard, "MATH QUIZ\nYear 5  -  10 questions\nWalk to the desk to start", WHITE)
+addText(blackboard, "MATH QUIZ\nDarjah 5 - Tingkatan 3  -  10 questions\nWalk to the desk to start", WHITE)
 block(corner, "BoardPostNorth", Vector3.new(0.6, 9.5, 0.6), CFrame.new(CX - 10.7, FLOOR_TOP + 4.75, CZ - 7.2), WOOD)
 block(corner, "BoardPostSouth", Vector3.new(0.6, 9.5, 0.6), CFrame.new(CX - 10.7, FLOOR_TOP + 4.75, CZ + 7.2), WOOD)
 
@@ -128,7 +131,7 @@ block(corner, "DeskTop", Vector3.new(3, 0.3, 6.5), CFrame.new(CX - 6, FLOOR_TOP 
 
 local prompt = make(desk, "ProximityPrompt", "StartQuiz")
 prompt.ObjectText = "Math Quiz"
-prompt.ActionText = "Start quiz"
+prompt.ActionText = "Choose level"
 prompt.HoldDuration = 0
 prompt.MaxActivationDistance = 14
 prompt.RequiresLineOfSight = false
@@ -200,7 +203,7 @@ local function isCurrent()
 end
 
 local random = Random.new()
-local sessions = {} -- [player] = { order, number, score, correctIndex, awaiting }
+local sessions = {} -- [player] = { level, pool, order, number, score, correctIndex, awaiting }
 
 local function nearDesk(player)
 	local character = player.Character
@@ -208,12 +211,32 @@ local function nearDesk(player)
 	return root ~= nil and (root.Position - desk.Position).Magnitude <= START_DISTANCE
 end
 
+local function isValidLevel(level)
+	if type(level) ~= "string" then
+		return false
+	end
+	for _, value in ipairs(LEVELS) do
+		if value == level then
+			return true
+		end
+	end
+	return false
+end
+
+local function offerLevels(player)
+	if not isCurrent() or not nearDesk(player) then
+		return
+	end
+	sessions[player] = nil
+	quizRemote:FireClient(player, "Levels", { Levels = LEVELS })
+end
+
 local function sendQuestion(player)
 	local session = sessions[player]
 	if not session then
 		return
 	end
-	local entry = QUESTIONS[session.order[session.number]]
+	local entry = session.pool[session.order[session.number]]
 
 	-- Shuffle the four choices; the correct one is first in the bank.
 	local slots = { 1, 2, 3, 4 }
@@ -233,26 +256,44 @@ local function sendQuestion(player)
 	quizRemote:FireClient(player, "Question", {
 		Number = session.number,
 		Total = QUESTIONS_PER_QUIZ,
+		Level = session.level,
 		Topic = entry.Topic,
 		Text = entry.Question,
 		Choices = choices,
 	})
 end
 
-local function startQuiz(player)
+local function startQuiz(player, level)
 	if not isCurrent() or not nearDesk(player) then
 		return
 	end
-	-- Pick 10 different questions.
+	if not isValidLevel(level) then
+		offerLevels(player)
+		return
+	end
+
+	-- Build the pool of questions for this level only.
 	local pool = {}
-	for index = 1, #QUESTIONS do
-		pool[index] = index
+	for _, entry in ipairs(QUESTIONS) do
+		if entry.Level == level then
+			pool[#pool + 1] = entry
+		end
+	end
+	if #pool == 0 then
+		offerLevels(player)
+		return
+	end
+
+	local indices = {}
+	for index = 1, #pool do
+		indices[index] = index
 	end
 	local order = {}
-	for _ = 1, math.min(QUESTIONS_PER_QUIZ, #pool) do
-		order[#order + 1] = table.remove(pool, random:NextInteger(1, #pool))
+	for _ = 1, math.min(QUESTIONS_PER_QUIZ, #indices) do
+		order[#order + 1] = table.remove(indices, random:NextInteger(1, #indices))
 	end
-	sessions[player] = { order = order, number = 1, score = 0, correctIndex = 0, awaiting = false }
+
+	sessions[player] = { level = level, pool = pool, order = order, number = 1, score = 0, correctIndex = 0, awaiting = false }
 	sendQuestion(player)
 end
 
@@ -269,17 +310,17 @@ local function finishQuiz(player)
 		starsValue(player).Value += stars
 	end
 
-	lastLine = string.format("LAST: %s  %d/%d", player.DisplayName, session.score, total)
+	lastLine = string.format("LAST: %s  %d/%d (%s)", player.DisplayName, session.score, total, session.level)
 	if not bestScore or session.score > bestScore then
 		bestScore = session.score
 		bestName = player.DisplayName
 	end
 	refreshScoreBoard()
 
-	quizRemote:FireClient(player, "Finished", { Score = session.score, Total = total, Stars = stars })
+	quizRemote:FireClient(player, "Finished", { Score = session.score, Total = total, Stars = stars, Level = session.level })
 end
 
-prompt.Triggered:Connect(startQuiz)
+prompt.Triggered:Connect(offerLevels)
 
 quizRemote.OnServerEvent:Connect(function(player, action, value)
 	if not isCurrent() then
@@ -287,8 +328,10 @@ quizRemote.OnServerEvent:Connect(function(player, action, value)
 	end
 	if action == "Start" then
 		if not sessions[player] then
-			startQuiz(player)
+			offerLevels(player)
 		end
+	elseif action == "ChooseLevel" then
+		startQuiz(player, value)
 	elseif action == "Quit" then
 		sessions[player] = nil
 	elseif action == "Answer" then
@@ -325,4 +368,4 @@ Players.PlayerRemoving:Connect(function(player)
 	sessions[player] = nil
 end)
 
-print(LOG .. string.format("Math corner complete: %d questions in the bank, %d per quiz.", #QUESTIONS, QUESTIONS_PER_QUIZ))
+print(LOG .. string.format("Math corner complete: %d questions in the bank across %d levels, %d per quiz.", #QUESTIONS, #LEVELS, QUESTIONS_PER_QUIZ))
